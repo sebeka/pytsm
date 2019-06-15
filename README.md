@@ -1,19 +1,18 @@
 # pytsm
 
-A VERY basic replacement for a Tivoli Storage Manager, which can be used to store backups on hard disks.
+A VERY basic tool, behaving like a Tivoli Storage Manager, and can be used to store backups on hard disks.
 
-This is intend as a quick hack, in case of problems with a real TSM. pyTSM can be used, to help you out and do some simple backups
-with your existing client configs and monitoring infrastructure.
+This is intend as a quick hack, in case of problems with a real TSM. pyTSM can be used, to help you out and do some simple backups with your existing client configs and monitoring infrastructure.
 
 ## Some features:
-  - pyTSM parses client configs and does basic handlich od "DOMAIN" and "EXCLUDE.DIR" directives
+  - pyTSM parses client configs and does basic handling of "DOMAIN" and "EXCLUDE.DIR" directives
   - preserving hardlinks
   - writing mails in case of problems
-  - optional writing of logfiles at the client (adsmsched.log), to make monitoring tools happy (experimental feature)
+  - optional: write logfiles at the clients (adsmsched.log), to make monitoring tools happy (experimental feature)
   
 ## Limitations:
   - storing only ONE version of the data (have to use multiple instances if you like more versions - duplicates the amount of data)
-  - only working on linux
+  - only working for linux clients
   - only useful for replacing "dsmc sched" mode in my opinion
   
 ## Requirements on the client
