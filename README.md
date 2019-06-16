@@ -2,7 +2,7 @@
 
 A VERY basic tool, behaving like a Tivoli Storage Manager, and can be used to store backups on hard disks.
 
-This is intend as a quick hack, in case of problems with a real TSM. pyTSM can be used, to help you out and do some simple backups with your existing client configs and monitoring infrastructure.
+This is intend as a quick fix, in case of problems with a real TSM. The script pyTSM can be used, to help you out and do some simple backups with your existing client configs and monitoring infrastructure.
 
 ## Some features:
   - pyTSM parses client configs and does basic handling of "DOMAIN" and "EXCLUDE.DIR" directives
@@ -45,16 +45,16 @@ client3.org /tape1   /etc/adsm/dsm.sys
 ## run pyTSM
 The best is, to run it as a cronjob. Don't forget to edit the "SMTP_SERVER" line at the top of the script.
 
-Than you can run:
+Then you can run:
 
-```bash
+```
 # pytsm.py -f client.list -m YOUR_EMAIL_ADDRESS -l
 ```
 
 ## run a single backup job
 
 
-```bash
+```
 # pytsm.py -c client1.org -C /etc/adsm/dsm.sys -d /tape0 -m YOUR_EMAIL_ADDRESS -l
 ```
 
@@ -72,9 +72,9 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
    -d --dest destination_dir
       Destination directory where the backup should be stored
    -f --clientfile client_list_file
-      A file with the clients and destination_dirs like:
-           "FQDN1 DIR1 DSMC_CONFIG_FILE1"
-           "FQDN2 DIR2 DSMC_CONFIG_FILE2"
+      A file with the clients and destination_dirs and config_file_paths like:
+           "FQDN1 DEST_DIR1 DSMC_CONFIG_FILE1"
+           "FQDN2 DEST_DIR2 DSMC_CONFIG_FILE2"
            "server1.org  /tape2  /etc/adsm/dsm.sys"
    -l --log
       Write a adsmsched.log on client.
