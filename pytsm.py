@@ -94,7 +94,7 @@ def parseArguments():
    return (givenArgs)
 
 
-def sendmail(mailto, subject, text):
+def sendMail(mailto, subject, text):
    print (text)
    if (mailto != ""):
       sender = 'root@' + socket.getfqdn()
@@ -112,7 +112,7 @@ Subject: ''' + subject + '''
          print('Error: unable to send mail to ' + mailto) 
 
 
-def parseclientlist(listfile):
+def parseClientList(listfile):
    clients = []
    with open(listfile) as file:
       for line in file:
@@ -123,7 +123,28 @@ def parseclientlist(listfile):
    return(clients)
 
 
-def getClientconf(client, dsmsys, destdir, mailto):
+def execCommand(commandString):
+   ret = {
+      'stdout' : "",
+      'stderr' : "",
+      'retval' : 0
+   }
+
+   try:
+      output = subprocess.check_output(commandString, stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+   except subprocess.CalledProcessError as exc:
+      ret['stderr'] = exc.output
+      ret['retval'] = exc.returncode
+   else:
+      ret['stdout'] = output
+      #print("Output: \n{}\n".format(output))
+
+   return ret
+
+
+
+
+def getClientConf(client, dsmsys, destdir, mailto):
 
    domains = []
    excludedirs = []
@@ -136,25 +157,21 @@ def getClientconf(client, dsmsys, destdir, mailto):
 
 
    # test if dsm.sys is there
-   cmd = ['/usr/bin/ssh', client, 'test -f ' + dsmsys]
-   try:
-      retval = subprocess.call(cmd)
-   except:
-      sendmail(mailto, 'Backup failed on ' + client, 'Error: Could not connect to ' + client)
+   cmd = '/usr/bin/ssh ' + client + ' test -f ' + dsmsys
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendmMail(mailto, 'Backup failed on ' + client, 'Error: File ' + dsmsys + ' not found on ' + client  + ':' + ret['stderr'])
       return False
 
-   if (retval != 0):
-      sendmail(mailto, 'Backup failed on ' + client, 'Error: File ' + dsmsys + ' not found on ' + client + ' or could not connect via ssh')
-      return False
    # get the content of dsm.sys
-   cmd = ['/usr/bin/ssh', client, 'cat ' + dsmsys]
-   try:
-      output = subprocess.check_output(cmd)
-   except:
-      sendmail(mailto, 'Backup failed on ' + client, 'Error: Could not connect to ' + client)
+   cmd = '/usr/bin/ssh ' +  client + ' cat ' + dsmsys
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendMail(mailto, 'Backup failed on ' + client, 'Error: Could not look in ' + dsmsys + ' on ' + client + ':' + ret['stderr'])
       return False
 
-   for line in output.decode('utf8').splitlines():
+   #for line in output.decode('utf8').splitlines():
+   for line in ret['stdout'].splitlines():
       line = line.strip()
       line = line.split()
       if (len(line) >= 2) and (line[0][0] != '*'):
@@ -175,39 +192,30 @@ def getClientconf(client, dsmsys, destdir, mailto):
 
 
 
-def writelogfile(client, logfile, result, data, mailto):
+def writeLogFile(client, logfile, result, data, mailto):
    print('Writing to ' + logfile + ' on ' + client)
+   #print(data)
+
    mailSubject = 'Could not write Backup logfile on ' + client
 
    # test if logfile is there:
    if (logfile == ""):
-      sendmail(mailto, mailSubject, 'No logfile given in dsmc config')
+      sendMail(mailto, mailSubject, 'No logfile given in dsmc config')
       return False
-   cmd = ['/usr/bin/ssh', client, 'test -f ' + logfile]
-   try:
-      retval = subprocess.call(cmd)
-   except:
-      sendmail(mailto, mailSubject, 'Error: Could not connect to ' + client)
+   cmd = '/usr/bin/ssh ' + client + ' "test -f ' + logfile + '"'
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendMail(mailto, mailSubject, 'Error: File ' + logfile + ' not found on ' + client + ':' + ret['stderr'])
       return False
-
-   if (retval != 0):
-      sendmail(mailto, mailSubject, 'Error: File ' + logfile + ' not found on ' + client + ' or could not connect via ssh')
-      return False
-
 
    # figure out the right date form from the client
    cmd = '/usr/bin/ssh ' + client + ' "date +%x"'
-   try:
-      output = subprocess.check_output(
-         cmd, stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
-   except subprocess.CalledProcessError as exc:
-      sendmail(mailto, mailSubject, '''Error: Command "''' + cmd + '''" failed:
-         ''' + exc.output)
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendMail(mailto, mailSubject, 'Error: Could not figure out the date format on ' + client + ':' + ret['stderr'])
       return False
 
-   date = output.strip()
-   #date    = time.strftime("%x")
-   #date    = time.strftime("%m/%d/%Y")
+   date = ret['stdout'].strip()
    curtime = time.strftime("%X")
    prefix = date + '   ' + curtime + ' '
    logs = []
@@ -233,19 +241,18 @@ def writelogfile(client, logfile, result, data, mailto):
    data = "\n".join(logs)
 
    # write logfile
-   cmd = ['/usr/bin/ssh', client, 'echo -e "' + data + '" | tee -a ' + logfile]
-   try:
-      output = subprocess.check_output(cmd)
-   except:
-      sendmail(mailto, mailSubject, 'Error: Could not connect to ' + client)
+   cmd = 'echo "' + data + '" | /usr/bin/ssh ' + client + ' "cat >> ' + logfile + '"'
+   print(cmd)
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendMail(mailto, mailSubject, 'Error: Could not write to ' + logfile + ' on ' + client + ':' + ret['stderr'] + ':' + ret['stderr'])
       return False
-   #print (output)
 
 
 def runOneClient(client, dsmsys, destdir, writelog, mailto):
    destdir = destdir + "/" + client
    print("Backup " + client + " to " + destdir + " ...")
-   clientConf = getClientconf(client, dsmsys, destdir, mailto)
+   clientConf = getClientConf(client, dsmsys, destdir, mailto)
    if (clientConf == False):
       return
    #print(clientConf)
@@ -263,17 +270,15 @@ def runOneClient(client, dsmsys, destdir, writelog, mailto):
    cmd = ' '.join(cmd)
    print(cmd)
    result = 'completed successfully'
-   try:
-      output = subprocess.check_output(
-         cmd, stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
-   except subprocess.CalledProcessError as exc:
-      sendmail(mailto, 'Backup problem on ' + client, '''Error: Command "''' + cmd + '''" failed:
-         ''' + exc.output)
+   ret = execCommand(cmd)
+   if (ret['retval'] != 0):
+      sendMail(mailto, 'Backup problem on ' + client, '''Error: Command "''' + cmd  + '''" failed:
+''' + ret['stderr'])
       result = 'failed'
 
-   #print(output)
+   #print(ret)
    if (writelog == True):
-      writelogfile(client, clientConf['logfile'], result, output, mailto)
+      writeLogFile(client, clientConf['logfile'], result, ret['stdout'] + ret['stderr'], mailto)
 
 
 
@@ -288,7 +293,7 @@ givenArgs = parseArguments()
 if (givenArgs['clientlist'] == ""):
    runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['mailto'])
 else:
-   clients = parseclientlist(givenArgs['clientlist'])
+   clients = parseClientList(givenArgs['clientlist'])
    #print(clients);
    for client in clients:
       if (client[0][0] == '#'):
