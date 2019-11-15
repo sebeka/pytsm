@@ -38,6 +38,8 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
            "server1.org  /tape2  /etc/adsm/dsm.sys"
    -l --log
       Write a adsmsched.log on client.
+   -L --Log path to custom log file
+      Write logs not to adsmsched.log but to "custom log file".
    -m --mail admin_mail
       In case of errors, write a mail to this address.
 
@@ -53,12 +55,13 @@ def parseArguments():
       "destdir"          : "",
       "clientlist"       : "",
       "log"              : False,
+      "customlogfile"    : False,
       "mailto"           : ""
    }
    
    
    try:
-      options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lm:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'mailto'])
+      options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'mailto'])
    except:
       printUsage()
       sys.exit(1)
@@ -76,6 +79,8 @@ def parseArguments():
          givenArgs['clientlist'] = opt[1]
       elif opt[0] in ('-l', '--log'):
          givenArgs['log'] = True
+      elif opt[0] in ('-L', '--logfile'):
+         givenArgs['customlogfile'] = opt[1]
       elif opt[0] in ('-m', '--mail'):
          givenArgs['mailto'] = opt[1]
    
@@ -90,6 +95,10 @@ def parseArguments():
       if (not os.path.isfile(givenArgs['clientlist'])):
          print("Folder " + givenArgs['clientlist'] + " not found")
          sys.exit(1)
+
+   if (givenArgs['log'] == True and givenArgs['customlogfile'] != ""):
+      print("Error, either \"-l\" or \"-L LOGFILE\" could be used")
+      sys.exit(1)
    
    return (givenArgs)
 
@@ -249,7 +258,7 @@ def writeLogFile(client, logfile, result, data, mailto):
       return False
 
 
-def runOneClient(client, dsmsys, destdir, writelog, mailto):
+def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto):
    destdir = destdir + "/" + client
    print("Backup " + client + " to " + destdir + " ...")
    clientConf = getClientConf(client, dsmsys, destdir, mailto)
@@ -279,6 +288,8 @@ def runOneClient(client, dsmsys, destdir, writelog, mailto):
    #print(ret)
    if (writelog == True):
       writeLogFile(client, clientConf['logfile'], result, ret['stdout'] + ret['stderr'], mailto)
+   if (writelogToFile != ""):
+      writeLogFile(client, writelogToFile, result, ret['stdout'] + ret['stderr'], mailto)
 
 
 
@@ -291,13 +302,13 @@ givenArgs = parseArguments()
 #print(givenArgs)
 
 if (givenArgs['clientlist'] == ""):
-   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['mailto'])
+   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'])
 else:
    clients = parseClientList(givenArgs['clientlist'])
    #print(clients);
    for client in clients:
       if (client[0][0] == '#'):
           continue
-      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['mailto'])
+      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'])
 
 
