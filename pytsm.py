@@ -55,7 +55,7 @@ def parseArguments():
       "destdir"          : "",
       "clientlist"       : "",
       "log"              : False,
-      "customlogfile"    : False,
+      "customlogfile"    : "",
       "mailto"           : ""
    }
    
