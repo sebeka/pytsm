@@ -42,6 +42,8 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
       Write logs not to adsmsched.log but to "custom log file".
    -m --mail admin_mail
       In case of errors, write a mail to this address.
+   -v --versions number
+      Versions to keep (hard-linked)
 
 ''')
    sys.exit(1)
@@ -56,12 +58,13 @@ def parseArguments():
       "clientlist"       : "",
       "log"              : False,
       "customlogfile"    : "",
-      "mailto"           : ""
+      "mailto"           : "",
+      "versions"         : "1"
    }
    
    
    try:
-      options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'mailto'])
+       options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:v:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'mailto', 'versions'])
    except:
       printUsage()
       sys.exit(1)
@@ -83,7 +86,9 @@ def parseArguments():
          givenArgs['customlogfile'] = opt[1]
       elif opt[0] in ('-m', '--mail'):
          givenArgs['mailto'] = opt[1]
-   
+      elif opt[0] in ('-v', '--versions'):
+         givenArgs['versions'] = opt[1]
+
    if (givenArgs['clientlist'] == ""):
       if (givenArgs['client'] == "" or givenArgs['destdir'] == "" or givenArgs['dsmsys'] == ""):
          print("Error, you have to give either a list of clients \"--clientfile\", or a single client \"-c\" with a path to dsm.sys \"-C\"  and a single destionation folder \"-f\"")
@@ -99,6 +104,15 @@ def parseArguments():
    if (givenArgs['log'] == True and givenArgs['customlogfile'] != ""):
       print("Error, either \"-l\" or \"-L LOGFILE\" could be used")
       sys.exit(1)
+
+   if (not givenArgs['versions'].isdigit()):
+      print("Error, \"versions\" has to be a number > 0")
+      sys.exit(1)
+   givenArgs['versions'] = int(givenArgs['versions'])
+   if (givenArgs['versions'] < 1):
+      print("Error, \"versions\" has to be a number > 0")
+      sys.exit(1)
+
    
    return (givenArgs)
 
@@ -153,7 +167,7 @@ def execCommand(commandString):
 
 
 
-def getClientConf(client, dsmsys, destdir, mailto):
+def getClientConf(client, dsmsys, mailto):
 
    domains = []
    excludedirs = []
@@ -169,7 +183,7 @@ def getClientConf(client, dsmsys, destdir, mailto):
    cmd = '/usr/bin/ssh ' + client + ' test -f ' + dsmsys
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendmMail(mailto, 'Backup failed on ' + client, 'Error: File ' + dsmsys + ' not found on ' + client  + ':' + ret['stderr'])
+      sendMail(mailto, 'Backup failed on ' + client, 'Error: File ' + dsmsys + ' not found on ' + client  + ':' + ret['stderr'])
       return False
 
    # get the content of dsm.sys
@@ -199,6 +213,37 @@ def getClientConf(client, dsmsys, destdir, mailto):
    clientconf['logfile']     = logfile
    return (clientconf)
 
+
+def moveOlder(versions,destdir, client):
+   if versions > 2:
+      # first we have to create a list from (versions - 3) to (0)
+      #for i in range ((versions - 2), 0):
+      for i in range (0, (versions - 2)):
+         version = (versions - i - 2)
+
+         source = destdir + "/version-" + str(version)
+         dest   = destdir + "/version-" + str(version + 1)
+         if os.path.isdir(source):
+            print ("  move " + source + " to " + dest + ' ...')
+            cmd = ['mv', source, dest]
+            cmd = ' '.join(cmd)
+            ret = execCommand(cmd)
+            if (ret['retval'] != 0):
+               sendMail(mailto, mailSubject, 'Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
+               print ('Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
+               return false;
+
+   # copy with hardlinks 0 -> 1
+   if os.path.isdir(destdir + "/version-0"):
+      print ('  Copy ' + destdir + '/version-0 to ' + destdir + '/version-1 ...')
+      cmd = ['cp', '-l', '-a', destdir + "/version-0", destdir + "/version-1"]
+      cmd = ' '.join(cmd)
+      ret = execCommand(cmd)
+      if (ret['retval'] != 0):
+         print ('Error: Could cp -l -a ' + destdir + '/version-0 to ' + destdir + '/version-1 : ' + ret['stderr'])
+         return False;
+
+   return True;
 
 
 def writeLogFile(client, logfile, result, data, mailto):
@@ -258,16 +303,29 @@ def writeLogFile(client, logfile, result, data, mailto):
       return False
 
 
-def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto):
-   destdir = destdir + "/" + client
+def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto, versions):
+   storeIn = destdir + "/version-0/" + client
    print("Backup " + client + " to " + destdir + " ...")
-   clientConf = getClientConf(client, dsmsys, destdir, mailto)
+   clientConf = getClientConf(client, dsmsys, mailto)
    if (clientConf == False):
       return
    #print(clientConf)
 
+   if (versions > 1):
+      if not moveOlder(versions,destdir, client):
+         if (writelog == True):
+            writeLogFile(client, clientConf['logfile'], result, 'Failure during moveOlder', mailto)
+         if (writelogToFile != ""):
+            writeLogFile(client, writelogToFile, result, 'Failure during moveOlder', mailto)
+         print ('Error: Failure during moveOlder')
+         return 
+
    if (not os.path.isdir(destdir)):
       os.mkdir(destdir)
+   if (not os.path.isdir(destdir + "/version-0/")):
+      os.mkdir(destdir + "/version-0/")
+   if (not os.path.isdir(storeIn)):
+      os.mkdir(storeIn)
 
    cmd = ['rsync', '-a', '-H', '-x', '--delete', '--numeric-ids', '--stats']
    for domain in clientConf['domains']:
@@ -275,7 +333,7 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto):
    for excludedir in clientConf['excludedirs']:
       cmd.append('--exclude')
       cmd.append(excludedir)
-   cmd.append(destdir)
+   cmd.append(storeIn)
    cmd = ' '.join(cmd)
    print(cmd)
    result = 'completed successfully'
@@ -302,13 +360,13 @@ givenArgs = parseArguments()
 #print(givenArgs)
 
 if (givenArgs['clientlist'] == ""):
-   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'])
+   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'], givenArgs['versions'])
 else:
    clients = parseClientList(givenArgs['clientlist'])
    #print(clients);
    for client in clients:
       if (client[0][0] == '#'):
           continue
-      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'])
+      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'], givenArgs['versions'])
 
 
