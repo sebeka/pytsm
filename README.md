@@ -48,14 +48,14 @@ The best is, to run it as a cronjob. Don't forget to edit the "SMTP_SERVER" line
 Then you can run:
 
 ```
-# pytsm.py -f client.list -m YOUR_EMAIL_ADDRESS -l
+# pytsm.py -f client.list -m YOUR_EMAIL_ADDRESS -l -v 4
 ```
 
 ## run a single backup job
 
 
 ```
-# pytsm.py -c client1.org -C /etc/adsm/dsm.sys -d /tape0 -m YOUR_EMAIL_ADDRESS -l
+# pytsm.py -c client1.org -C /etc/adsm/dsm.sys -d /tape0 -m YOUR_EMAIL_ADDRESS -l -v 4
 ```
 
 ## Readme
