@@ -10,7 +10,6 @@ import socket
 import time
 import shutil
 
-SMTP_SERVER = 'smtp.org'
 STAT_MAPPINGS = [
    {'from' : 'Number of files:' ,                     'to' : 'Total number of objects inspected:      '},
    {'from' : 'Number of regular files transferred:' , 'to' : 'Total number of objects backed up:      '},
