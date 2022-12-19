@@ -24,7 +24,7 @@ def printUsage():
    print ('''pyTSM (pythons Trusty Storage Manager)
 
 Usage:
-python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l]
+python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions]
 
    -c --client fqdn
       FQDN od IP of a client which should be backuped
