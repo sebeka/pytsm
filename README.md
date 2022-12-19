@@ -6,9 +6,9 @@ This is intend as a quick fix, in case of problems with a real TSM. The script p
 
 ## Some features:
   - NEW: versioning like in rssnapshot
+  - NEW: remove mail support (was not used)
   - pyTSM parses client configs and does basic handling of "DOMAIN" and "EXCLUDE.DIR" directives
   - preserving hardlinks
-  - writing mails in case of problems (not tested in last versions)
   - optional: write logfiles at the clients (adsmsched.log), to make monitoring tools happy (experimental feature)
   
 ## Limitations:
@@ -63,7 +63,7 @@ Then you can run:
 pyTSM (pythons Trusty Storage Manager)
 
 Usage:
-python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -m admin_mail | -v versions ]
+python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions ]
 
    -c --client fqdn
       FQDN od IP of a client which should be backuped
@@ -78,8 +78,6 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
            "server1.org  /tape2  /etc/adsm/dsm.sys"
    -l --log
       Write a adsmsched.log on client.
-   -m --mail admin_mail
-      In case of errors, write a mail to this address.
    -v --versions number
       Versions to keep (hard-linked)
 ```
