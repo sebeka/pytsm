@@ -8,6 +8,7 @@ import subprocess
 import smtplib
 import socket
 import time
+import shutil
 
 SMTP_SERVER = 'smtp.org'
 STAT_MAPPINGS = [
@@ -23,7 +24,7 @@ def printUsage():
    print ('''pyTSM (pythons Trusty Storage Manager)
 
 Usage:
-python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l -m admin_mail]
+python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l]
 
    -c --client fqdn
       FQDN od IP of a client which should be backuped
@@ -40,8 +41,6 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
       Write a adsmsched.log on client.
    -L --Log path to custom log file
       Write logs not to adsmsched.log but to "custom log file".
-   -m --mail admin_mail
-      In case of errors, write a mail to this address.
    -v --versions number
       Versions to keep (hard-linked)
 
@@ -58,13 +57,12 @@ def parseArguments():
       "clientlist"       : "",
       "log"              : False,
       "customlogfile"    : "",
-      "mailto"           : "",
       "versions"         : "1"
    }
    
    
    try:
-       options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:v:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'mailto', 'versions'])
+       options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:v:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'versions'])
    except:
       printUsage()
       sys.exit(1)
@@ -84,8 +82,6 @@ def parseArguments():
          givenArgs['log'] = True
       elif opt[0] in ('-L', '--logfile'):
          givenArgs['customlogfile'] = opt[1]
-      elif opt[0] in ('-m', '--mail'):
-         givenArgs['mailto'] = opt[1]
       elif opt[0] in ('-v', '--versions'):
          givenArgs['versions'] = opt[1]
 
@@ -116,23 +112,6 @@ def parseArguments():
    
    return (givenArgs)
 
-
-def sendMail(mailto, subject, text):
-   print (text)
-   if (mailto != ""):
-      sender = 'root@' + socket.getfqdn()
-      receivers = [mailto]
-      message = '''From: ''' + sender + '''
-To: ''' + mailto + '''
-Subject: ''' + subject + '''
-
-''' + text
-      try:
-         smtpObj = smtplib.SMTP(SMTP_SERVER)
-         smtpObj.sendmail(sender, receivers, message)
-      #except SMTPException:
-      except:
-         print('Error: unable to send mail to ' + mailto) 
 
 
 def parseClientList(listfile):
@@ -167,7 +146,7 @@ def execCommand(commandString):
 
 
 
-def getClientConf(client, dsmsys, mailto):
+def getClientConf(client, dsmsys):
 
    domains = []
    excludedirs = []
@@ -183,14 +162,14 @@ def getClientConf(client, dsmsys, mailto):
    cmd = '/usr/bin/ssh ' + client + ' test -f ' + dsmsys
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, 'Backup failed on ' + client, 'Error: File ' + dsmsys + ' not found on ' + client  + ':' + ret['stderr'])
+      print('Backup failed on ' + client + ' Error: File ' + dsmsys + ' not found on ' + client  + ':' + ret['stderr'])
       return False
 
    # get the content of dsm.sys
    cmd = '/usr/bin/ssh ' +  client + ' cat ' + dsmsys
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, 'Backup failed on ' + client, 'Error: Could not look in ' + dsmsys + ' on ' + client + ':' + ret['stderr'])
+      print('Backup failed on ' + client + ' Error: Could not look in ' + dsmsys + ' on ' + client + ':' + ret['stderr'])
       return False
 
    #for line in output.decode('utf8').splitlines():
@@ -215,58 +194,61 @@ def getClientConf(client, dsmsys, mailto):
 
 
 def moveOlder(versions,destdir, client):
+   # at first, delete oldes version
+   oldestFolder = destdir + "/version-" + str(versions - 1) + "/" + client
+   if os.path.isdir(oldestFolder):
+       shutil.rmtree(oldestFolder)
+
+
    if versions > 2:
       # first we have to create a list from (versions - 3) to (0)
       #for i in range ((versions - 2), 0):
       for i in range (0, (versions - 2)):
          version = (versions - i - 2)
 
-         source = destdir + "/version-" + str(version)
-         dest   = destdir + "/version-" + str(version + 1)
+         source = destdir + "/version-" + str(version) + "/" + client
+         dest   = destdir + "/version-" + str(version + 1) + "/"
          if os.path.isdir(source):
             print ("  move " + source + " to " + dest + ' ...')
             cmd = ['mv', source, dest]
             cmd = ' '.join(cmd)
             ret = execCommand(cmd)
             if (ret['retval'] != 0):
-               sendMail(mailto, mailSubject, 'Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
                print ('Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
-               return false;
+               return False
 
    # copy with hardlinks 0 -> 1
    if os.path.isdir(destdir + "/version-0"):
-      print ('  Copy ' + destdir + '/version-0 to ' + destdir + '/version-1 ...')
-      cmd = ['cp', '-l', '-a', destdir + "/version-0", destdir + "/version-1"]
+      print ('  Copy ' + destdir + '/version-0/' + client + ' to ' + destdir + '/version-1/  ...')
+      cmd = ['cp', '-l', '-a', destdir + "/version-0/" + client, destdir + "/version-1/"]
       cmd = ' '.join(cmd)
       ret = execCommand(cmd)
       if (ret['retval'] != 0):
-         print ('Error: Could cp -l -a ' + destdir + '/version-0 to ' + destdir + '/version-1 : ' + ret['stderr'])
+         print ('Error: Could cp -l -a ' + destdir + '/version-0/' + client + ' to ' + destdir + '/version-1/ ' + client + ' : ' + ret['stderr'])
          return False;
 
    return True;
 
 
-def writeLogFile(client, logfile, result, data, mailto):
+def writeLogFile(client, logfile, result, data):
    print('Writing to ' + logfile + ' on ' + client)
    #print(data)
 
-   mailSubject = 'Could not write Backup logfile on ' + client
-
    # test if logfile is there:
    if (logfile == ""):
-      sendMail(mailto, mailSubject, 'No logfile given in dsmc config')
+      print("Error: No logfile given in dsmc config")
       return False
    cmd = '/usr/bin/ssh ' + client + ' "test -f ' + logfile + '"'
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, mailSubject, 'Error: File ' + logfile + ' not found on ' + client + ':' + ret['stderr'])
+      print( 'Error: File ' + logfile + ' not found on ' + client + ':' + ret['stderr'])
       return False
 
    # figure out the right date form from the client
    cmd = '/usr/bin/ssh ' + client + ' "date +%x"'
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, mailSubject, 'Error: Could not figure out the date format on ' + client + ':' + ret['stderr'])
+      print( 'Error: Could not figure out the date format on ' + client + ':' + ret['stderr'])
       return False
 
    date = ret['stdout'].strip()
@@ -299,14 +281,14 @@ def writeLogFile(client, logfile, result, data, mailto):
    print(cmd)
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, mailSubject, 'Error: Could not write to ' + logfile + ' on ' + client + ':' + ret['stderr'] + ':' + ret['stderr'])
+      print ('Error: Could not write to ' + logfile + ' on ' + client + ':' + ret['stderr'] + ':' + ret['stderr'])
       return False
 
 
-def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto, versions):
+def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
    storeIn = destdir + "/version-0/" + client
    print("Backup " + client + " to " + destdir + " ...")
-   clientConf = getClientConf(client, dsmsys, mailto)
+   clientConf = getClientConf(client, dsmsys)
    if (clientConf == False):
       return
    #print(clientConf)
@@ -314,9 +296,9 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto, vers
    if (versions > 1):
       if not moveOlder(versions,destdir, client):
          if (writelog == True):
-            writeLogFile(client, clientConf['logfile'], result, 'Failure during moveOlder', mailto)
+            writeLogFile(client, clientConf['logfile'], result, 'Failure during moveOlder')
          if (writelogToFile != ""):
-            writeLogFile(client, writelogToFile, result, 'Failure during moveOlder', mailto)
+            writeLogFile(client, writelogToFile, result, 'Failure during moveOlder')
          print ('Error: Failure during moveOlder')
          return 
 
@@ -339,15 +321,15 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, mailto, vers
    result = 'completed successfully'
    ret = execCommand(cmd)
    if (ret['retval'] != 0):
-      sendMail(mailto, 'Backup problem on ' + client, '''Error: Command "''' + cmd  + '''" failed:
+      print('Error: Backup problem on ' + client, '''Error: Command "''' + cmd  + '''" failed:
 ''' + ret['stderr'])
       result = 'failed'
 
    #print(ret)
    if (writelog == True):
-      writeLogFile(client, clientConf['logfile'], result, ret['stdout'] + ret['stderr'], mailto)
+      writeLogFile(client, clientConf['logfile'], result, ret['stdout'] + ret['stderr'])
    if (writelogToFile != ""):
-      writeLogFile(client, writelogToFile, result, ret['stdout'] + ret['stderr'], mailto)
+      writeLogFile(client, writelogToFile, result, ret['stdout'] + ret['stderr'])
 
 
 
@@ -360,13 +342,13 @@ givenArgs = parseArguments()
 #print(givenArgs)
 
 if (givenArgs['clientlist'] == ""):
-   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'], givenArgs['versions'])
+   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'])
 else:
    clients = parseClientList(givenArgs['clientlist'])
    #print(clients);
    for client in clients:
       if (client[0][0] == '#'):
           continue
-      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['mailto'], givenArgs['versions'])
+      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'])
 
 
