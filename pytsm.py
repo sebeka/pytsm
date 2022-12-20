@@ -10,6 +10,7 @@ import socket
 import time
 import shutil
 
+SMTP_SERVER = 'smtp.org'
 STAT_MAPPINGS = [
    {'from' : 'Number of files:' ,                     'to' : 'Total number of objects inspected:      '},
    {'from' : 'Number of regular files transferred:' , 'to' : 'Total number of objects backed up:      '},
@@ -193,6 +194,8 @@ def getClientConf(client, dsmsys):
 
 
 def moveOlder(versions,destdir, client):
+   TIMESTAMP = int(time.time())
+
    # at first, delete oldes version
    oldestFolder = destdir + "/version-" + str(versions - 1) + "/" + client
    if os.path.isdir(oldestFolder):
@@ -207,14 +210,21 @@ def moveOlder(versions,destdir, client):
 
          source = destdir + "/version-" + str(version) + "/" + client
          dest   = destdir + "/version-" + str(version + 1) + "/"
-         if os.path.isdir(source):
-            print ("  move " + source + " to " + dest + ' ...')
-            cmd = ['mv', source, dest]
-            cmd = ' '.join(cmd)
-            ret = execCommand(cmd)
-            if (ret['retval'] != 0):
-               print ('Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
-               return False
+         if not os.path.isdir(source):
+            # skip if not copied so fas
+            continue
+
+         print ("  move " + source + " to " + dest + ' ...')
+         cmd = ['mv', source, dest]
+         cmd = ' '.join(cmd)
+         ret = execCommand(cmd)
+         if (ret['retval'] != 0):
+            print ('Error: Could not move ' + source + ' to ' + dest + ' : ' + ret['stderr'])
+            return False
+
+         # repair the timestamp on dest for the older versions
+         os.utime(dest, (TIMESTAMP, TIMESTAMP - ((version + 1) * 3600 * 24)) )
+
 
    # copy with hardlinks 0 -> 1
    if os.path.isdir(destdir + "/version-0"):
@@ -225,8 +235,9 @@ def moveOlder(versions,destdir, client):
       if (ret['retval'] != 0):
          print ('Error: Could cp -l -a ' + destdir + '/version-0/' + client + ' to ' + destdir + '/version-1/ ' + client + ' : ' + ret['stderr'])
          return False;
+      os.utime(destdir + '/version-1/' , (TIMESTAMP, TIMESTAMP - (3600 * 24) ))
 
-   return True;
+   return True
 
 
 def writeLogFile(client, logfile, result, data):
@@ -323,6 +334,9 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
       print('Error: Backup problem on ' + client, '''Error: Command "''' + cmd  + '''" failed:
 ''' + ret['stderr'])
       result = 'failed'
+   else:
+      TIMESTAMP = int(time.time())
+      os.utime(destdir + "/version-0", (TIMESTAMP, TIMESTAMP ))
 
    #print(ret)
    if (writelog == True):
