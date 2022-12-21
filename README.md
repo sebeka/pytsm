@@ -63,7 +63,7 @@ Then you can run:
 pyTSM (pythons Trusty Storage Manager)
 
 Usage:
-python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions ]
+python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions | -t]
 
    -c --client fqdn
       FQDN od IP of a client which should be backuped
@@ -72,12 +72,18 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
    -d --dest destination_dir
       Destination directory where the backup should be stored
    -f --clientfile client_list_file
-      A file with the clients and destination_dirs and config_file_paths like:
-           "FQDN1 DEST_DIR1 DSMC_CONFIG_FILE1"
-           "FQDN2 DEST_DIR2 DSMC_CONFIG_FILE2"
+      A file with the clients and destination_dirs like:
+           "FQDN1 DIR1 DSMC_CONFIG_FILE1"
+           "FQDN2 DIR2 DSMC_CONFIG_FILE2"
            "server1.org  /tape2  /etc/adsm/dsm.sys"
    -l --log
       Write a adsmsched.log on client.
+   -L --Log path to custom log file
+      Write logs not to adsmsched.log but to "custom log file".
    -v --versions number
       Versions to keep (hard-linked)
+   -t --timestamp
+      create a file "rsnapshot.timestamp" in every Domain on the backup-client with the
+      current timestamp. (needed for check with check-bkup-versions.py)
+
 ```
