@@ -24,7 +24,7 @@ def printUsage():
    print ('''pyTSM (pythons Trusty Storage Manager)
 
 Usage:
-python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions]
+python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file) [-l | -v versions | -t]
 
    -c --client fqdn
       FQDN od IP of a client which should be backuped
@@ -43,7 +43,9 @@ python3 pytsm.py (-c client -C dsm_conf -d destination_dir | -f client_list_file
       Write logs not to adsmsched.log but to "custom log file".
    -v --versions number
       Versions to keep (hard-linked)
-
+   -t --timestamp
+      create a file "rsnapshot.timestamp" in every Domain on the backup-client with the
+      current timestamp. (needed for check with check-bkup-versions.py)
 ''')
    sys.exit(1)
 
@@ -57,12 +59,13 @@ def parseArguments():
       "clientlist"       : "",
       "log"              : False,
       "customlogfile"    : "",
-      "versions"         : "1"
+      "versions"         : "1",
+      "timestamp"        : False
    }
    
    
    try:
-       options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:v:', ['client', 'dsmconf', 'dest', 'clientfile', 'log', 'logfile', 'versions'])
+       options,arguments = getopt.getopt(sys.argv[1:], 'c:C:d:f:lL:m:v:t', ['client=', 'dsmconf=', 'dest=', 'clientfile=', 'log=', 'logfile=', 'versions=', 'timestamp='])
    except:
       printUsage()
       sys.exit(1)
@@ -84,6 +87,9 @@ def parseArguments():
          givenArgs['customlogfile'] = opt[1]
       elif opt[0] in ('-v', '--versions'):
          givenArgs['versions'] = opt[1]
+      elif opt[0] in ('-t', '--timestamp'):
+         givenArgs['timestamp'] = True
+
 
    if (givenArgs['clientlist'] == ""):
       if (givenArgs['client'] == "" or givenArgs['destdir'] == "" or givenArgs['dsmsys'] == ""):
@@ -295,7 +301,7 @@ def writeLogFile(client, logfile, result, data):
       return False
 
 
-def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
+def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions, timestamp):
    # get config
    storeIn = destdir + "/version-0/" + client
    print("Backup " + client + " to " + destdir + " ...")
@@ -317,12 +323,14 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
 
 
    # create rsnapshot.timestamp files on Server
-   TIMESTAMP = int(time.time())
-   for domain in clientConf['domains']:
-      cmd = 'ssh ' + client + ' "echo ' + str(TIMESTAMP) + ' > ' + domain + '/rsnapshot.timestamp"'
-      ret = execCommand(cmd)
-      if (ret['retval'] != 0):
-          print('Error: Could not create rsnapshot.timestamp on ' + client + "/" + domain + ' : ' + ret['stderr'])
+   if timestamp:
+      TIMESTAMP = int(time.time())
+      for domain in clientConf['domains']:
+         cmd = 'ssh ' + client + ' "echo ' + str(TIMESTAMP) + ' > ' + domain + '/rsnapshot.timestamp"'
+         ret = execCommand(cmd)
+         if (ret['retval'] != 0):
+             print('Error: Could not create rsnapshot.timestamp on ' + client + "/" + domain + ' : ' + ret['stderr'])
+             sys.exit(1)
 
    if (not os.path.isdir(destdir)):
       os.mkdir(destdir)
@@ -367,13 +375,13 @@ givenArgs = parseArguments()
 #print(givenArgs)
 
 if (givenArgs['clientlist'] == ""):
-   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'])
+   runOneClient(givenArgs['client'], givenArgs['dsmsys'], givenArgs['destdir'], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'], givenArgs['timestamp'])
 else:
    clients = parseClientList(givenArgs['clientlist'])
    #print(clients);
    for client in clients:
       if (client[0][0] == '#'):
           continue
-      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'])
+      runOneClient(client[0], client[2], client[1], givenArgs['log'], givenArgs['customlogfile'], givenArgs['versions'], givenArgs['timestamp'])
 
 
