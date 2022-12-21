@@ -296,12 +296,15 @@ def writeLogFile(client, logfile, result, data):
 
 
 def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
+   # get config
    storeIn = destdir + "/version-0/" + client
    print("Backup " + client + " to " + destdir + " ...")
    clientConf = getClientConf(client, dsmsys)
    if (clientConf == False):
       return
    #print(clientConf)
+
+   TIMESTAMP = int(time.time())
 
    if (versions > 1):
       if not moveOlder(versions,destdir, client):
@@ -311,6 +314,15 @@ def runOneClient(client, dsmsys, destdir, writelog, writelogToFile, versions):
             writeLogFile(client, writelogToFile, result, 'Failure during moveOlder')
          print ('Error: Failure during moveOlder')
          return 
+
+
+   # create rsnapshot.timestamp files on Server
+   TIMESTAMP = int(time.time())
+   for domain in clientConf['domains']:
+      cmd = 'ssh ' + client + ' "echo ' + str(TIMESTAMP) + ' > ' + domain + '/rsnapshot.timestamp"'
+      ret = execCommand(cmd)
+      if (ret['retval'] != 0):
+          print('Error: Could not create rsnapshot.timestamp on ' + client + "/" + domain + ' : ' + ret['stderr'])
 
    if (not os.path.isdir(destdir)):
       os.mkdir(destdir)
